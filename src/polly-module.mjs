@@ -38,3 +38,15 @@ export const pollySynth = async ({ phrase, type = "mp3" }) => {
 
     return { stream: audioData, contentType, size: audioData.length, timestamp: Date.now() };
 };
+
+export const speechMarks = async ({ phrase, type = "json" }) => {
+    const pollyParams = { ...defaultParams, Text: phrase, OutputFormat: type, SpeechMarkTypes: ["word"] };
+
+    const a = await polly.synthesizeSpeech(pollyParams).promise();
+    const { err, AudioStream, ContentType } = a;
+    if (err) {
+        throw err;
+    }
+
+    return { stream: AudioStream, contentType: ContentType, size: AudioStream.length, timestamp: Date.now() };
+};

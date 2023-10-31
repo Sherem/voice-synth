@@ -2,7 +2,7 @@ import express from "express";
 import { localPlayer } from "./local-payer.mjs";
 import { VoiceCache } from "./voice-cache.mjs";
 import { typeExt } from "./utils.mjs";
-import { pollySynth } from "./polly-module.mjs";
+import { pollySynth, speechMarks } from "./polly-module.mjs";
 
 const log = console;
 const port = 3001;
@@ -41,7 +41,6 @@ const errorWrapper = (message, handler) => async (req, resp, next) => {
 
 (async () => {
     const player = await localPlayer();
-    const voiceCache = VoiceCache();
 
     app.get("/", (req, res) => {
         res.send("Voice guide API");
@@ -64,9 +63,9 @@ const errorWrapper = (message, handler) => async (req, resp, next) => {
     voiceApp.post(
         "/stream/",
         errorWrapper("load phrase", async (req, res) => {
-            const { phrase, type } = req.body;
+            const { phrase, type, filename = "voice" } = req.body;
             const { stream, contentType, size } = await pollySynth({ phrase, type });
-            const fileName = `voice.${typeExt[contentType]}`;
+            const fileName = `${filename}.${typeExt[contentType]}`;
             res.set({
                 "Content-Type": contentType,
                 "Content-Disposition": `attachment; filename=${fileName}`
@@ -74,6 +73,22 @@ const errorWrapper = (message, handler) => async (req, resp, next) => {
             log.log(`Stream phrase to file: ${fileName} Size: ${size}`);
             res.status(200);
             res.end(Buffer.from(stream, "base64"));
+        })
+    );
+
+    voiceApp.post(
+        "/marks/",
+        errorWrapper("make marks", async (req, res) => {
+            const { phrase, type, filename = "voice" } = req.body;
+            const { stream, contentType, size } = await speechMarks({ phrase, type });
+            const fileName = `${filename}.${typeExt[contentType]}`;
+            res.set({
+                "Content-Type": contentType,
+                "Content-Disposition": `attachment; filename=${fileName}`
+            });
+            log.log(`Stream phrase to file: ${fileName} Size: ${size}`);
+            res.status(200);
+            res.end(Buffer.from(stream, "utf-8"));
         })
     );
 
