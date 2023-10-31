@@ -64,4 +64,4 @@ Body
 | Name       | Type     | Required | Default | Description                                                   |
 |:-----------|:---------|:---------|:--------|:--------------------------------------------------------------|
 | `phrase`   | `string` | yes      |         | Phrase to mark                                                |
-| `filename` | `string` | no       | "voice" | Filename for stream with no extension. Extension will `.jasn` |
+| `filename` | `string` | no       | "voice" | Filename for stream with no extension. Extension will `.json` |
