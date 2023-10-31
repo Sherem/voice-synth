@@ -2,6 +2,7 @@ import express from "express";
 import { localPlayer } from "./local-payer.mjs";
 import { VoiceCache } from "./voice-cache.mjs";
 import { typeExt } from "./utils.mjs";
+import { pollySynth } from "./polly-module.mjs";
 
 const log = console;
 const port = 3001;
@@ -29,6 +30,15 @@ const checkParams = (req, res, next) => {
 
 voiceApp.use(checkParams);
 
+const errorWrapper = (message, handler) => async (req, resp, next) => {
+    try {
+        await handler(req, resp, next);
+    } catch (err) {
+        log.error(`Failed to ${message}`);
+        next(err);
+    }
+};
+
 (async () => {
     const player = await localPlayer();
     const voiceCache = VoiceCache();
@@ -37,35 +47,43 @@ voiceApp.use(checkParams);
         res.send("Voice guide API");
     });
 
-    voiceApp.post("/say/", async (req, res) => {
-        const { phrase, type } = req.body;
-        const { stream, contentType, size } = await voiceCache.say({ phrase, type });
-        player
-            .playBuffer(stream, contentType)
-            .then(() => {
-                log.log(`Played phrase: ${phrase} Size: ${size}`);
-            })
-            .catch(err => {
-                log.error(`Error play phrase`);
-                log.error(err);
+    voiceApp.post(
+        "/say/",
+        errorWrapper("play phrase", async (req, res, next) => {
+            const { phrase, type } = req.body;
+            const { stream, contentType, size } = await pollySynth({
+                phrase,
+                type
             });
-        res.json({ success: true });
-    });
+            await player.playBuffer(stream, contentType);
+            log.log(`Played phrase: ${phrase} Size: ${size}`);
+            res.json({ success: true });
+        })
+    );
 
-    voiceApp.post("/stream/", async (req, res) => {
-        const { phrase, type } = req.body;
-        const { stream, contentType, size } = await voiceCache.say({ phrase, type });
-        const fileName = `voice.${typeExt[contentType]}`;
-        res.set({
-            "Content-Type": contentType,
-            "Content-Disposition": `attachment; filename=${fileName}`
-        });
-        log.log(`Stream phrase to file: ${fileName} Size: ${size}`);
-        res.status(200);
-        res.end(Buffer.from(stream, "base64"));
-    });
+    voiceApp.post(
+        "/stream/",
+        errorWrapper("load phrase", async (req, res) => {
+            const { phrase, type } = req.body;
+            const { stream, contentType, size } = await pollySynth({ phrase, type });
+            const fileName = `voice.${typeExt[contentType]}`;
+            res.set({
+                "Content-Type": contentType,
+                "Content-Disposition": `attachment; filename=${fileName}`
+            });
+            log.log(`Stream phrase to file: ${fileName} Size: ${size}`);
+            res.status(200);
+            res.end(Buffer.from(stream, "base64"));
+        })
+    );
 
     app.use("/voice", voiceApp);
+
+    app.use((err, req, res, next) => {
+        console.error(err.stack);
+        res.status(500);
+        res.json({ error: err.toString() });
+    });
 
     app.listen(port, () => {
         log.log(`Start voice guide API at port: ${port}`);
