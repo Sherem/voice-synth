@@ -1,10 +1,17 @@
 import express from "express";
 import OpenAI from "openai";
+import https from "https";
+import fs from "fs";
 
 import { localPlayer } from "./local-payer.mjs";
 import { VoiceCache } from "./voice-cache.mjs";
 import { typeExt } from "./utils.mjs";
 import { pollySynth, speechMarks } from "./polly-module.mjs";
+
+const privateKey  = fs.readFileSync('key.pem', 'utf8');
+const certificate = fs.readFileSync('cert.pem', 'utf8');
+
+const credentials = {key: privateKey, cert: certificate};
 
 const openai = new OpenAI();
 const log = console;
@@ -41,6 +48,8 @@ const errorWrapper = (message, handler) => async (req, resp, next) => {
         next(err);
     }
 };
+
+const httpsServer = https.createServer(credentials, app);
 
 (async () => {
     const player = await localPlayer();
@@ -116,7 +125,7 @@ const errorWrapper = (message, handler) => async (req, resp, next) => {
         res.json({ error: err.toString() });
     });
 
-    app.listen(port, () => {
+    httpsServer.listen(port, () => {
         log.log(`Start voice guide API at port: ${port}`);
     });
 })().catch(err => log.error(err));
