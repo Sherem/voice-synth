@@ -1,9 +1,12 @@
 import express from "express";
+import OpenAI from "openai";
+
 import { localPlayer } from "./local-payer.mjs";
 import { VoiceCache } from "./voice-cache.mjs";
 import { typeExt } from "./utils.mjs";
 import { pollySynth, speechMarks } from "./polly-module.mjs";
 
+const openai = new OpenAI();
 const log = console;
 const port = 3001;
 const app = express();
@@ -44,6 +47,19 @@ const errorWrapper = (message, handler) => async (req, resp, next) => {
 
     app.get("/", (req, res) => {
         res.send("Voice guide API");
+    });
+
+    app.get("/question/:text", async (req, res) => {
+      if (req.params.text) {
+        const completion = await openai.chat.completions.create({
+          messages: [{ role: "system", content: req.params.text }],
+          model: "gpt-4",
+        });
+
+        res.send(completion.choices[0]);
+      } else {
+        res.send("Not text value");
+      }
     });
 
     voiceApp.post(
