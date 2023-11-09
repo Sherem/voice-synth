@@ -7,22 +7,27 @@ import { pollySynth, speechMarks } from "./polly-module.mjs";
 const log = console;
 const port = 3001;
 const app = express();
+
 app.use(express.json());
 
 const voiceApp = express();
 
 const checkParams = (req, res, next) => {
-    const { phrase, type } = req.body;
-    let message;
-    if (!phrase) {
-        message = "Phrase is empty";
-    }
-    if (type && !["mp3", "pcm", "ogg_vorbis", "wav"].includes(type)) {
-        message = "Wrong output format (type)";
-    }
-    if (message) {
-        log.error(message);
-        res.status(400).send(message);
+    if (req.method === "POST") {
+        const { phrase, type } = req.body;
+        let message;
+        if (!phrase) {
+            message = "Phrase is empty";
+        }
+        if (type && !["mp3", "pcm", "ogg_vorbis", "wav"].includes(type)) {
+            message = "Wrong output format (type)";
+        }
+        if (message) {
+            log.error(message);
+            res.status(400).send(message);
+        } else {
+            next();
+        }
     } else {
         next();
     }
@@ -34,13 +39,15 @@ const errorWrapper = (message, handler) => async (req, resp, next) => {
     try {
         await handler(req, resp, next);
     } catch (err) {
-        log.error(`Failed to ${message}`);
+        log.error(`Failed to ${message}. Error: ${err}`);
         next(err);
     }
 };
 
 (async () => {
     const player = await localPlayer();
+
+    const cache = VoiceCache();
 
     app.get("/", (req, res) => {
         res.send("Voice guide API");
@@ -76,11 +83,37 @@ const errorWrapper = (message, handler) => async (req, resp, next) => {
         })
     );
 
+    voiceApp.get(
+        "/stream/:hash",
+        errorWrapper("load phrase", async (req, res) => {
+            const { hash } = req.params;
+            const { filename = "voice" } = req.query;
+
+            const voiceDataObject = cache.get(hash);
+
+            if (!voiceDataObject) {
+                res.status(404);
+                res.end("Voice data not found");
+                return;
+            }
+
+            const [{ stream, contentType, size }] = voiceDataObject;
+            const fileName = `${filename}.${typeExt[contentType]}`;
+            res.set({
+                "Content-Type": contentType,
+                "Content-Disposition": `attachment; filename=${fileName}`
+            });
+            log.log(`Stream phrase to file: ${fileName} Size: ${size}`);
+            res.status(200);
+            res.end(Buffer.from(stream, "base64"));
+        })
+    );
+
     voiceApp.post(
         "/marks/",
         errorWrapper("make marks", async (req, res) => {
-            const { phrase, type, filename = "voice" } = req.body;
-            const { stream, contentType, size } = await speechMarks({ phrase, type });
+            const { phrase, filename = "voice" } = req.body;
+            const { stream, contentType, size } = await speechMarks({ phrase });
             const fileName = `${filename}.${typeExt[contentType]}`;
             res.set({
                 "Content-Type": contentType,
@@ -89,6 +122,27 @@ const errorWrapper = (message, handler) => async (req, resp, next) => {
             log.log(`Stream phrase to file: ${fileName} Size: ${size}`);
             res.status(200);
             res.end(Buffer.from(stream, "utf-8"));
+        })
+    );
+
+    voiceApp.post(
+        "/generate/",
+        errorWrapper("generate phrase", async (req, res) => {
+            const { phrase, type = "voice", useMarks } = req.body;
+            const { voice, marks, hash } = await cache.generate({ phrase, type, useMarks });
+            const { size } = voice;
+
+            const result = {
+                marks,
+                link: `${req.baseUrl}/stream/${hash}`
+            };
+
+            res.set({
+                "Content-Type": "application/json"
+            });
+            log.log(`Phrase stored to cache. Size of voice data: ${size}`);
+            res.status(200);
+            res.json(result);
         })
     );
 

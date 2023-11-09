@@ -1,5 +1,5 @@
 import { createHash } from "crypto";
-import { pollySynth } from "./polly-module.mjs";
+import { pollySynth, speechMarks } from "./polly-module.mjs";
 
 const DEFAULT_CACHE_SIZE = 1015808; // 8 MB
 export const VoiceCache = (maxCacheSize = DEFAULT_CACHE_SIZE) => {
@@ -23,22 +23,46 @@ export const VoiceCache = (maxCacheSize = DEFAULT_CACHE_SIZE) => {
             }
         }
     };
-    const say = async ({ phrase, type }) => {
+    const generate = async ({ phrase, type, useMarks = false }) => {
         const hash = makeHash(phrase, type);
-        let voiceData = cacheMap.get(hash);
+        let voiceDataObject = cacheMap.get(hash);
 
-        if (!voiceData) {
-            voiceData = await pollySynth({ phrase, type });
-            const { size } = voiceData;
+        if (!voiceDataObject) {
+            const tasks = [() => pollySynth({ phrase, type })];
+
+            if (useMarks) {
+                tasks.push(() => speechMarks({ phrase }));
+            }
+
+            const voiceData = await Promise.all(tasks.map(task => task()));
+
+            const size = voiceData.reduce((acc, { size }) => acc + size, 0);
+
+            const [voice, marks] = voiceData;
+
+            const { stream } = marks;
+            const markArray = stream
+                .toString("utf-8")
+                .split("\n")
+                .filter(item => item)
+                .map(item => JSON.parse(item));
+
+            voiceDataObject = [voice, markArray];
+
             cleanCache(size);
             cacheSize += size;
-            cacheMap.set(hash, voiceData);
+            cacheMap.set(hash, voiceDataObject);
         }
 
-        return voiceData;
+        const [voice, markArray] = voiceDataObject;
+
+        return { voice, marks: markArray, hash };
     };
 
+    const get = hash => cacheMap.get(hash);
+
     return {
-        say
+        generate,
+        get
     };
 };
