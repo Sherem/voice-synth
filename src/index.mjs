@@ -56,10 +56,11 @@ const errorWrapper = (message, handler) => async (req, resp, next) => {
     voiceApp.post(
         "/say/",
         errorWrapper("play phrase", async (req, res, next) => {
-            const { phrase, type } = req.body;
+            const { phrase, type, voiceId } = req.body;
             const { stream, contentType, size } = await pollySynth({
                 phrase,
-                type
+                type,
+                voiceId
             });
             await player.playBuffer(stream, contentType);
             log.log(`Played phrase: ${phrase} Size: ${size}`);
@@ -70,8 +71,8 @@ const errorWrapper = (message, handler) => async (req, resp, next) => {
     voiceApp.post(
         "/stream/",
         errorWrapper("load phrase", async (req, res) => {
-            const { phrase, type, filename = "voice" } = req.body;
-            const { stream, contentType, size } = await pollySynth({ phrase, type });
+            const { phrase, type, filename = "voice", voiceId } = req.body;
+            const { stream, contentType, size } = await pollySynth({ phrase, type, voiceId });
             const fileName = `${filename}.${typeExt[contentType]}`;
             res.set({
                 "Content-Type": contentType,
@@ -112,8 +113,8 @@ const errorWrapper = (message, handler) => async (req, resp, next) => {
     voiceApp.post(
         "/marks/",
         errorWrapper("make marks", async (req, res) => {
-            const { phrase, filename = "voice" } = req.body;
-            const { stream, contentType, size } = await speechMarks({ phrase });
+            const { phrase, filename = "voice", voiceId } = req.body;
+            const { stream, contentType, size } = await speechMarks({ phrase, voiceId });
             const fileName = `${filename}.${typeExt[contentType]}`;
             res.set({
                 "Content-Type": contentType,
@@ -128,8 +129,8 @@ const errorWrapper = (message, handler) => async (req, resp, next) => {
     voiceApp.post(
         "/generate/",
         errorWrapper("generate phrase", async (req, res) => {
-            const { phrase, type = "voice", useMarks } = req.body;
-            const { voice, marks, hash } = await cache.generate({ phrase, type, useMarks });
+            const { phrase, type = "voice", useMarks, voiceId } = req.body;
+            const { voice, marks, hash } = await cache.generate({ phrase, type, useMarks, voiceId });
             const { size } = voice;
 
             const result = {

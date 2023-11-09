@@ -5,7 +5,8 @@ const DEFAULT_CACHE_SIZE = 1015808; // 8 MB
 export const VoiceCache = (maxCacheSize = DEFAULT_CACHE_SIZE) => {
     const cacheMap = new Map();
     let cacheSize = 0;
-    const makeHash = (phrase, type) => createHash("md5").update(`${phrase}${type}`).digest("hex");
+    const makeHash = (phrase, type, voiceId = "") =>
+        createHash("md5").update(`${phrase}${type}${voiceId}`).digest("hex");
     const cleanCache = candidateSize => {
         let newSize = cacheSize + candidateSize;
         if (newSize > maxCacheSize) {
@@ -23,15 +24,15 @@ export const VoiceCache = (maxCacheSize = DEFAULT_CACHE_SIZE) => {
             }
         }
     };
-    const generate = async ({ phrase, type, useMarks = false }) => {
-        const hash = makeHash(phrase, type);
+    const generate = async ({ phrase, type, useMarks = false, voiceId }) => {
+        const hash = makeHash(phrase, type, voiceId);
         let voiceDataObject = cacheMap.get(hash);
 
         if (!voiceDataObject) {
-            const tasks = [() => pollySynth({ phrase, type })];
+            const tasks = [() => pollySynth({ phrase, type, voiceId })];
 
             if (useMarks) {
-                tasks.push(() => speechMarks({ phrase }));
+                tasks.push(() => speechMarks({ phrase, voiceId }));
             }
 
             const voiceData = await Promise.all(tasks.map(task => task()));
